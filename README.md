@@ -1,5 +1,10 @@
 # ![RealWorld Example App](logo.png)
 
+# Lonli-Lokli Edit
+
+This implementation uses [Effector](https://effector.dev/) as a replacement for the original Signal implementation. It does not use any RxJS except auth interceptor.
+
+
 > ### Angular 16@next with Signals codebase containing real world examples (CRUD, auth, advanced patterns, etc) that adheres to the [RealWorld](https://github.com/gothinkster/realworld) spec and API.
 
 ### [Demo](https://ng-conduit-signals.onrender.com/)&nbsp;&nbsp;&nbsp;&nbsp;[RealWorld](https://github.com/gothinkster/realworld)&nbsp;&nbsp;&nbsp;&nbsp;[Stackblitz](https://stackblitz.com/github/nartc/ng-conduit-signals?preset=node/)

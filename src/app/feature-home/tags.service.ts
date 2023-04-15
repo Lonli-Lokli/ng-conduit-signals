@@ -1,5 +1,5 @@
-import { HttpErrorResponse } from '@angular/common/http';
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
+import { createEffect, createEvent, createStore, sample } from 'effector';
 import { lastValueFrom } from 'rxjs';
 import { TagsApiClient } from '../shared-data-access-api';
 import { ApiStatus } from '../shared-data-access-models/api-status';
@@ -8,23 +8,46 @@ import { ApiStatus } from '../shared-data-access-models/api-status';
 export class TagsService {
     readonly #tagsApiClient = inject(TagsApiClient);
 
-    readonly #status = signal<ApiStatus>('idle');
-    readonly #tags = signal<string[]>([]);
+    // events
+    readonly getTagsRequested = createEvent();
 
-    readonly tags = this.#tags.asReadonly();
-    readonly status = this.#status.asReadonly();
+    // stores
+    readonly status = createStore<ApiStatus>('idle');
+    readonly tags = createStore<string[]>([]);
 
-    getTags() {
-        this.#status.set('loading');
-        lastValueFrom(this.#tagsApiClient.getTags())
-            .then((response) => {
-                this.#status.set('success');
-                this.#tags.set(response.tags);
-            })
-            .catch(({ error }: HttpErrorResponse) => {
-                console.error('Error getting tags -->', error);
-                this.#status.set('error');
-                this.#tags.set([]);
-            });
+    // effects
+    readonly #tagsGetFx = createEffect<void, { tags: string[] }>();
+
+    constructor() {
+        sample({
+            source: this.getTagsRequested,
+            fn: () => 'loading' as const,
+            target: this.status,
+        });
+
+        sample({
+            source: this.getTagsRequested,
+            target:  this.#tagsGetFx
+        });
+        
+        sample({
+            clock: this.#tagsGetFx.doneData,
+            fn: (response) => response.tags,
+            target: this.tags,
+        });
+
+        sample({
+            source: this.getTagsRequested,
+            fn: () => 'success' as const,
+            target: this.status,
+        });
+
+        sample({
+            clock: this.#tagsGetFx.failData,
+            fn: () => 'error' as const,
+            target: [this.status, this.tags.reinit!],
+        });
+
+        this.#tagsGetFx.use(() => lastValueFrom(this.#tagsApiClient.getTags()));
     }
 }

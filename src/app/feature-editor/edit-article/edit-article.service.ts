@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { computed, inject, Injectable, signal } from '@angular/core';
+import { inject, Injectable } from '@angular/core';
 import { Router } from '@angular/router';
+import { createEffect, createEvent, createStore, sample } from 'effector';
 import { lastValueFrom } from 'rxjs';
 import { Article, ArticlesApiClient, UpdateArticle } from '../../shared-data-access-api';
 import { ApiStatus } from '../../shared-data-access-models/api-status';
@@ -10,37 +11,57 @@ export class EditArticleService {
     readonly #articlesApiClient = inject(ArticlesApiClient);
     readonly #router = inject(Router);
 
-    readonly #status = signal<ApiStatus>('idle');
-    readonly #article = signal<Article | null>(null);
+    // events
+    readonly articleSelected = createEvent<string>();
+    readonly articleUpdateClicked = createEvent<UpdateArticle>();
 
-    readonly isLoading = computed(() => this.#status() === 'loading');
-    readonly article = this.#article.asReadonly();
+    // stores
+    readonly #status = createStore<ApiStatus>('idle');
+    readonly article = createStore<Article | null>(null);
+    readonly isLoading = this.#status.map((status) => status === 'loading');
 
-    getArticle(slug: string) {
-        this.#status.set('loading');
-        lastValueFrom(this.#articlesApiClient.getArticle({ slug }))
-            .then((response) => {
-                this.#status.set('success');
-                this.#article.set(response.article);
-            })
-            .catch(({ error }: HttpErrorResponse) => {
-                console.error('error getting article by slug: ', error);
-                this.#status.set('error');
-            });
-    }
+    // effects
+    readonly #articleGetFx = createEffect<string, { article: Article }>();
+    readonly #articleUpdateFx = createEffect<{ article: Article; articleToUpdate: UpdateArticle }, void>();
 
-    updateArticle(articleToUpdate: UpdateArticle) {
-        const article = this.#article();
-        if (article) {
-            lastValueFrom(
+    constructor() {
+        sample({
+            source: this.articleSelected,
+            target: this.#articleGetFx,
+        });
+
+        sample({
+            clock: this.#articleGetFx.doneData,
+            fn: (response) => response.article,
+            target: this.article,
+        });
+
+        sample({
+            clock: this.#articleGetFx.done,
+            fn: () => 'success' as const,
+            target: this.#status,
+        });
+
+        sample({
+            clock: this.#articleGetFx.fail,
+            fn: () => 'error' as const,
+            target: this.#status,
+        });
+
+        sample({
+            clock: this.articleUpdateClicked,
+            source: this.article,
+            filter: (article: Article | null): article is Article => article !== null,
+            fn: (article, articleToUpdate) => ({ article, articleToUpdate }),
+            target: this.#articleUpdateFx,
+        });
+
+        this.#articleGetFx.use((slug) => lastValueFrom(this.#articlesApiClient.getArticle({ slug })));
+        this.#articleUpdateFx.use(async ({ article, articleToUpdate }) => {
+            const response = await lastValueFrom(
                 this.#articlesApiClient.updateArticle({ slug: article.slug, body: { article: articleToUpdate } })
-            )
-                .then((response) => {
-                    void this.#router.navigate(['/article', response.article.slug]);
-                })
-                .catch(({ error }: HttpErrorResponse) => {
-                    console.error('error updating article: ', error);
-                });
-        }
+            );
+            void this.#router.navigate(['/article', response.article.slug]);
+        });
     }
 }

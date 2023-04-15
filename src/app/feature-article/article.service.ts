@@ -1,7 +1,7 @@
-import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectorRef, Injectable, SecurityContext, computed, inject, signal } from '@angular/core';
+import { Injectable, SecurityContext, inject } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { Router } from '@angular/router';
+import { combine, createEffect, createEvent, createStore, sample } from 'effector';
 import { marked } from 'marked';
 import { lastValueFrom } from 'rxjs';
 import { Article, ArticlesApiClient, Comment, CommentsApiClient, Profile } from '../shared-data-access-api';
@@ -19,121 +19,152 @@ export class ArticleService {
     readonly #favoriteArticleService = inject(FavoriteArticleService);
     readonly #followAuthorService = inject(FollowAuthorService);
     readonly #authService = inject(AuthService);
-    readonly #cdr = inject(ChangeDetectorRef);
 
-    readonly #status = signal<ApiStatus>('idle');
-    readonly #article = signal<Article | null>(null);
-    readonly #comments = signal<Comment[]>([]);
+    // events
+    readonly newArticleSelected = createEvent<string>();
+    readonly favoriteToggled = createEvent<Article>();
+    readonly articleDeleted = createEvent<string>();
+    readonly followAuthorToggled = createEvent<Profile>();
+    readonly commentCreated = createEvent<string>();
+    readonly deleteCommentClicked = createEvent<number>();
 
-    readonly isLoading = computed(() => this.#status() === 'loading');
-    readonly article = computed(() => {
-        const article = this.#article();
-        if (!article) return article;
-        return { ...article, body: this.#domSanitizer.sanitize(SecurityContext.HTML, marked(article.body)) as string };
-    });
-    readonly isOwner = computed(() => {
-        const currentUser = this.#authService.user();
-        const article = this.#article();
-        return !!article && !!currentUser && article.author.username === currentUser.username;
-    });
-    readonly currentUserImage = computed(() => {
-        const currentUser = this.#authService.user();
-        return currentUser?.image || '';
-    });
-    readonly comments = computed(() => {
-        const currentUser = this.#authService.user();
-        const comments = this.#comments();
-        const isOwner = this.isOwner();
-        return comments.map((comment) => ({
-            ...comment,
-            isOwner:
-                comment.author.username === currentUser?.username ||
-                // if the current logged in user is the author, they should have the ability to delete comments
-                // in other words, they are owners of all comments
-                isOwner,
-        }));
-    });
+    // stores
+    readonly status = createStore<ApiStatus>('idle');
+    readonly article = createStore<Article | null>(null);
+    readonly #comments = createStore<Comment[]>([]);
+    readonly isLoading = this.status.map((status) => status === 'loading');
+    readonly isOwner = combine(
+        { currentUser: this.#authService.user, article: this.article },
+        ({ currentUser, article }) => !!article && !!currentUser && article.author.username === currentUser.username
+    );
+    readonly currentUserImage = this.#authService.user.map((currentUser) => currentUser?.image || '');
 
-    getArticle(slug: string) {
-        this.#status.set('loading');
-        Promise.all([
-            lastValueFrom(this.#articlesApiClient.getArticle({ slug })),
-            lastValueFrom(this.#commentsApiClient.getArticleComments({ slug })),
-        ])
-            .then(([articleResponse, commentsResponse]) => {
-                this.#status.set('success');
-                this.#article.set(articleResponse.article);
-                this.#comments.set(commentsResponse.comments);
-                // TODO not sure why we still need this?
-                this.#cdr.markForCheck();
-            })
-            .catch(({ error }: HttpErrorResponse) => {
-                console.error(`Error getting information for ${slug}`, error);
-                this.#status.set('error');
-                this.#article.set(null);
-                this.#comments.set([]);
-            });
-    }
+    readonly comments = combine(
+        { currentUser: this.#authService.user, comments: this.#comments, isOwner: this.isOwner },
+        ({ currentUser, comments, isOwner }) =>
+            comments.map((comment) => ({
+                ...comment,
+                isOwner:
+                    comment.author.username === currentUser?.username ||
+                    // if the current logged in user is the author, they should have the ability to delete comments
+                    // in other words, they are owners of all comments
+                    isOwner,
+            }))
+    );
 
-    toggleFavorite(articleToToggle: Article) {
-        this.#favoriteArticleService.toggleFavorite(articleToToggle).then((response) => {
-            if (response) {
-                this.#article.set(response);
-            }
+    // effects
+    readonly #loadArticleFx = createEffect<string, [{ article: Article }, { comments: Comment[] }]>();
+    readonly #toggleFavoriteFx = createEffect<Article, Article | null>();
+    readonly #deleteArticleFx = createEffect<string, void>();
+    readonly #followAuthorToggleFx = createEffect<Profile, Profile | null>();
+    readonly #createCommentFx = createEffect<{ comment: string; article: Article }, { comment: Comment }>();
+    readonly #deleteCommentFx = createEffect<{ commentId: number; article: Article }, void>();
+
+    constructor() {
+        sample({
+            source: this.newArticleSelected,
+            target: this.#loadArticleFx,
         });
-    }
 
-    deleteArticle(slug: string) {
-        lastValueFrom(this.#articlesApiClient.deleteArticle({ slug }))
-            .then(() => {
-                void this.#router.navigate(['/']);
-            })
-            .catch(({ error }: HttpErrorResponse) => {
-                console.error(`Error deleting article ${slug}`, error);
-            });
-    }
+        sample({
+            source: this.#loadArticleFx,
+            fn: () => 'loading' as const,
+            target: this.status,
+        });
 
-    toggleFollowAuthor(profile: Profile) {
-        this.#followAuthorService
-            .toggleFollow(profile)
-            .then((response) => {
-                if (response) {
-                    this.#article.update((article) => ({ ...article!, author: response }));
-                }
-            })
-            .catch(({ error }: HttpErrorResponse) => {
-                console.error(`Error toggle follow for ${profile.username}`, error);
-            });
-    }
+        sample({
+            source: this.#loadArticleFx.doneData,
+            fn: () => 'success' as const,
+            target: this.status,
+        });
 
-    createComment(comment: string) {
-        const article = this.#article();
-        if (article) {
+        sample({
+            source: this.#loadArticleFx.fail,
+            fn: () => 'error' as const,
+            target: this.status,
+        });
+
+        sample({
+            source: this.#loadArticleFx.doneData,
+            fn: ([articleResponse]) => ({
+                ...articleResponse.article,
+                body: this.#domSanitizer.sanitize(SecurityContext.HTML, marked(articleResponse.article.body)) as string,
+            }),
+            target: this.article,
+        });
+
+        sample({
+            source: this.#loadArticleFx.doneData,
+            fn: ([, commentsResponse]) => commentsResponse.comments,
+            target: this.#comments,
+        });
+
+        sample({
+            source: this.#toggleFavoriteFx.doneData,
+            filter: (response) => response !== null,
+            target: this.article,
+        });
+
+        sample({
+            clock: this.#followAuthorToggleFx.doneData,
+            source: this.article,
+            filter: (_, response): response is Profile => response !== null,
+            fn: (article, newAuthor) => ({ ...article!, author: newAuthor! }),
+            target: this.article,
+        });
+
+        sample({
+            clock: this.commentCreated,
+            source: this.article,
+            filter: (article: Article | null): article is Article => article !== null,
+            fn: (article, comment) => ({ article, comment }),
+            target: this.#createCommentFx,
+        });
+
+        sample({
+            clock: this.#createCommentFx.doneData,
+            source: this.#comments,
+            fn: (comments, response) => [...comments, response.comment],
+            target: this.#comments,
+        });
+
+        sample({
+            clock: this.deleteCommentClicked,
+            source: this.article,
+            filter: (article: Article | null): article is Article => article !== null,
+            fn: (article, commentId) => ({ article, commentId }),
+            target: this.#deleteCommentFx,
+        });
+
+        sample({
+            clock: this.#deleteCommentFx.done,
+            source: this.#comments,
+            fn: (comments, { params }) => comments.filter((comment) => comment.id !== params.commentId),
+            target: this.#comments,
+        });
+
+        this.#loadArticleFx.use((slug) =>
+            Promise.all([
+                lastValueFrom(this.#articlesApiClient.getArticle({ slug })),
+                lastValueFrom(this.#commentsApiClient.getArticleComments({ slug })),
+            ])
+        );
+        this.#toggleFavoriteFx.use((article) => this.#favoriteArticleService.toggleFavorite(article));
+        this.#deleteArticleFx.use(async (slug) => {
+            await lastValueFrom(this.#articlesApiClient.deleteArticle({ slug }));
+            void this.#router.navigate(['/']);
+        });
+        this.#followAuthorToggleFx.use((profile) => this.#followAuthorService.toggleFollow(profile));
+        this.#createCommentFx.use(({ comment, article }) =>
             lastValueFrom(
                 this.#commentsApiClient.createArticleComment({
                     body: { comment: { body: comment } },
                     slug: article.slug,
                 })
             )
-                .then((response) => {
-                    this.#comments.update((comments) => [...comments, response.comment]);
-                })
-                .catch(({ error }: HttpErrorResponse) => {
-                    console.error(`Error creating new comment`, error);
-                });
-        }
-    }
-
-    deleteComment(id: number) {
-        const article = this.#article();
-        if (article) {
-            lastValueFrom(this.#commentsApiClient.deleteArticleComment({ id, slug: article.slug }))
-                .then(() => {
-                    this.#comments.update((comments) => comments.filter((comment) => comment.id !== id));
-                })
-                .catch(({ error }: HttpErrorResponse) => {
-                    console.error(`Error deleting comment`, error);
-                });
-        }
+        );
+        this.#deleteCommentFx.use(({ commentId, article }) =>
+            lastValueFrom(this.#commentsApiClient.deleteArticleComment({ id: commentId, slug: article.slug }))
+        );
     }
 }

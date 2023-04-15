@@ -1,4 +1,4 @@
-import { NgFor, NgIf } from '@angular/common';
+import { AsyncPipe, NgFor, NgIf } from '@angular/common';
 import { ChangeDetectionStrategy, Component, Input as RouteInput, inject } from '@angular/core';
 import { FavoriteArticleService } from '../shared-data-access-favorite-article/favorite-article.service';
 import { FollowAuthorService } from '../shared-data-access-follow-author/follow-author.service';
@@ -10,18 +10,18 @@ import { ArticleService } from './article.service';
 @Component({
     standalone: true,
     template: `
-        <ng-container *ngIf="!articleService.isLoading(); else loading">
-            <ng-container *ngIf="article">
+        <ng-container *ngIf="!(articleService.isLoading | async); else loading">
+            <ng-container *ngIf="articleService.article | async as article">
                 <div class="banner">
                     <div class="container">
                         <h1>{{ article.title }}</h1>
 
                         <app-ui-article-article-meta
                             [article]="article"
-                            [isOwner]="articleService.isOwner()"
-                            (toggleFavorite)="articleService.toggleFavorite(article)"
-                            (delete)="articleService.deleteArticle(article.slug)"
-                            (followAuthor)="articleService.toggleFollowAuthor($event)"
+                            [isOwner]="(articleService.isOwner | async)!"
+                            (toggleFavorite)="articleService.favoriteToggled(article)"
+                            (delete)="articleService.articleDeleted(article.slug)"
+                            (followAuthor)="articleService.followAuthorToggled($event)"
                         />
                     </div>
                 </div>
@@ -46,24 +46,24 @@ import { ArticleService } from './article.service';
                     <div class="article-actions">
                         <app-ui-article-article-meta
                             [article]="article"
-                            [isOwner]="articleService.isOwner()"
-                            (toggleFavorite)="articleService.toggleFavorite(article)"
-                            (delete)="articleService.deleteArticle(article.slug)"
-                            (followAuthor)="articleService.toggleFollowAuthor($event)"
+                            [isOwner]="(articleService.isOwner | async)!"
+                            (toggleFavorite)="articleService.favoriteToggled(article)"
+                            (delete)="articleService.articleDeleted(article.slug)"
+                            (followAuthor)="articleService.followAuthorToggled($event)"
                         />
                     </div>
 
                     <div class="row">
                         <div class="col-xs-12 col-md-8 offset-md-2">
                             <app-ui-article-article-comment-form
-                                [currentUserImage]="articleService.currentUserImage()"
-                                (comment)="articleService.createComment($event)"
+                                [currentUserImage]="(articleService.currentUserImage | async)!"
+                                (comment)="articleService.commentCreated($event)"
                             />
 
                             <app-ui-article-article-comment
-                                *ngFor="let comment of articleService.comments()"
+                                *ngFor="let comment of articleService.comments | async"
                                 [comment]="comment"
-                                (delete)="articleService.deleteComment(comment.id)"
+                                (delete)="articleService.deleteCommentClicked(comment.id)"
                             />
                         </div>
                     </div>
@@ -77,16 +77,11 @@ import { ArticleService } from './article.service';
     changeDetection: ChangeDetectionStrategy.OnPush,
     providers: [ArticleService, FollowAuthorService, FavoriteArticleService],
     host: { class: 'block article-page' },
-    imports: [UiArticleArticleMeta, UiArticleArticleCommentForm, UiArticleArticleComment, NgIf, NgFor],
+    imports: [UiArticleArticleMeta, UiArticleArticleCommentForm, UiArticleArticleComment, NgIf, NgFor, AsyncPipe],
 })
-export default class Article {
+export default class Article {    
     protected readonly articleService = inject(ArticleService);
-
     @RouteInput() set slug(slug: string) {
-        this.articleService.getArticle(slug);
-    }
-
-    get article() {
-        return this.articleService.article()!;
+        this.articleService.newArticleSelected(slug);
     }
 }

@@ -1,8 +1,8 @@
-import { HttpErrorResponse } from '@angular/common/http';
-import { inject, Injectable, signal } from '@angular/core';
+import { inject, Injectable } from '@angular/core';
+import { createEffect, createEvent, createStore, sample } from 'effector';
 import { lastValueFrom } from 'rxjs';
 import { ProfileService } from '../feature-profile/profile.service';
-import { Article, ArticlesApiClient } from '../shared-data-access-api';
+import { Article, ArticlesApiClient, Profile } from '../shared-data-access-api';
 import { FavoriteArticleService } from '../shared-data-access-favorite-article/favorite-article.service';
 import { ApiStatus } from '../shared-data-access-models/api-status';
 import { PROFILE_ARTICLES_TYPE } from './profile-articles.di';
@@ -11,47 +11,77 @@ import { PROFILE_ARTICLES_TYPE } from './profile-articles.di';
 export class ProfileArticlesService {
     readonly #articlesApiClient = inject(ArticlesApiClient);
     readonly #favoriteArticleService = inject(FavoriteArticleService);
-
     readonly #articlesType = inject(PROFILE_ARTICLES_TYPE);
     readonly #profileService = inject(ProfileService);
 
-    readonly #status = signal<ApiStatus>('idle');
-    readonly #articles = signal<Article[]>([]);
+    // events
+    readonly getArticlesRequested = createEvent();
+    readonly toggleFavoriteClicked = createEvent<Article>();
 
-    readonly status = this.#status.asReadonly();
-    readonly articles = this.#articles.asReadonly();
+    // stores
+    readonly status = createStore<ApiStatus>('idle');
+    readonly articles = createStore<Article[]>([]);
 
-    getArticles() {
-        const profile = this.#profileService.profile();
-        if (profile) {
-            this.#status.set('loading');
+    // effects
+    readonly #articlesGetFx = createEffect<Profile, { articles: Article[]; articlesCount: number }>();
+    readonly #toggleFavoriteFx = createEffect<Article, Article | null>();
+
+    constructor() {
+        sample({
+            clock: this.getArticlesRequested,
+            source: this.#profileService.profile,
+            filter: (profile: Profile | null): profile is Profile => profile !== null,
+            target: this.#articlesGetFx,
+        });
+
+        sample({
+            source: this.#articlesGetFx,
+            fn: () => 'loading' as const,
+            target: this.status,
+        });
+
+        sample({
+            source: this.#articlesGetFx.doneData,
+            fn: () => 'success' as const,
+            target: this.status,
+        });
+
+        sample({
+            source: this.#articlesGetFx.doneData,
+            fn: (response) => response.articles,
+            target: this.articles,
+        });
+
+        sample({
+            source: this.#articlesGetFx.failData,
+            fn: () => 'error' as const,
+            target: this.status,
+        });
+
+        sample({
+            source: this.#articlesGetFx.failData,
+            target: this.articles.reinit!,
+        });
+
+        sample({
+            clock: this.#toggleFavoriteFx.done,
+            source: this.articles,
+            filter: (_, article) => article !== null,
+            fn: (articles, {params, result}) => articles.map(article => {
+                if (article.slug === params.slug) return result!;
+                return article;
+            }),
+            target: this.articles
+
+        })
+        this.#articlesGetFx.use((profile) =>
             lastValueFrom(
                 this.#articlesType === 'favorites'
                     ? this.#articlesApiClient.getArticles({ favorited: profile.username })
                     : this.#articlesApiClient.getArticles({ author: profile.username })
             )
-                .then((response) => {
-                    this.#status.set('success');
-                    this.#articles.set(response.articles);
-                })
-                .catch(({ error }: HttpErrorResponse) => {
-                    console.error('error getting articles: ', error);
-                    this.#status.set('error');
-                    this.#articles.set([]);
-                });
-        }
-    }
+        );
+        this.#toggleFavoriteFx.use(articleToToggle => this.#favoriteArticleService.toggleFavorite(articleToToggle));
 
-    toggleFavorite(articleToToggle: Article) {
-        this.#favoriteArticleService.toggleFavorite(articleToToggle).then((response) => {
-            if (response) {
-                this.#articles.update((articles) =>
-                    articles.map((article) => {
-                        if (article.slug === articleToToggle.slug) return response;
-                        return article;
-                    })
-                );
-            }
-        });
     }
 }

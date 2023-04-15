@@ -2,16 +2,17 @@ import { ChangeDetectionStrategy, Component, effect, inject } from '@angular/cor
 import { FormsModule } from '@angular/forms';
 import { UpdateUser } from '../shared-data-access-api';
 import { SettingsService } from './settings.service';
+import { AsyncPipe, NgIf } from '@angular/common';
 
 @Component({
     standalone: true,
     template: `
         <div class="container page">
-            <div class="row">
+            <div class="row" *ngIf="settingsService.updateUser | async as updateUser ">
                 <div class="col-md-6 offset-md-3 col-xs-12">
                     <h1 class="text-xs-center">Your Settings</h1>
 
-                    <form #form="ngForm" (ngSubmit)="settingsService.updateUser(updateUser)">
+                    <form #form="ngForm" (ngSubmit)="settingsService.userUpdateClicked(updateUser)">
                         <fieldset>
                             <fieldset class="form-group">
                                 <input
@@ -64,7 +65,7 @@ import { SettingsService } from './settings.service';
                             <button
                                 type="submit"
                                 class="btn btn-lg btn-primary pull-xs-right"
-                                [disabled]="form.invalid || settingsService.isLoading()"
+                                [disabled]="form.invalid || (settingsService.isLoading | async)"
                             >
                                 Update Settings
                             </button>
@@ -80,22 +81,11 @@ import { SettingsService } from './settings.service';
             </div>
         </div>
     `,
-    imports: [FormsModule],
+    imports: [FormsModule, AsyncPipe, NgIf],
     changeDetection: ChangeDetectionStrategy.OnPush,
     providers: [SettingsService],
     host: { class: 'block settings-page' },
 })
 export default class Settings {
     protected readonly settingsService = inject(SettingsService);
-    protected updateUser: UpdateUser = {};
-
-    constructor() {
-        effect(() => {
-            const user = this.settingsService.user();
-            if (user) {
-                this.updateUser = structuredClone(user);
-                this.updateUser.password = '';
-            }
-        });
-    }
 }

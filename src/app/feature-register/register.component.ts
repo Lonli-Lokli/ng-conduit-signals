@@ -1,4 +1,4 @@
-import { NgFor, NgIf } from '@angular/common';
+import { AsyncPipe, NgFor, NgIf } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -19,7 +19,7 @@ import { RegisterService } from './register.service';
 
             <app-shared-ui-form-errors [errors]="registerService.errors()" />
 
-            <form #form="ngForm" (ngSubmit)="registerService.register(newUser)">
+            <form #form="ngForm" (ngSubmit)="registerService.registerUserClicked(newUser)">
                 <fieldset class="form-group">
                     <input
                         [(ngModel)]="newUser.username"
@@ -54,7 +54,7 @@ import { RegisterService } from './register.service';
                 <button
                     type="submit"
                     class="btn btn-lg btn-primary pull-xs-right"
-                    [disabled]="!form.valid || registerService.isLoading()"
+                    [disabled]="!form.valid || (registerService.isLoading | async)"
                 >
                     Sign up
                 </button>
@@ -62,7 +62,7 @@ import { RegisterService } from './register.service';
         </app-shared-ui-form-layout>
     `,
     changeDetection: ChangeDetectionStrategy.OnPush,
-    imports: [SharedUiFormLayout, SharedUiFormErrors, NgIf, NgFor, RouterLink, FormsModule],
+    imports: [SharedUiFormLayout, SharedUiFormErrors, NgIf, NgFor, RouterLink, FormsModule, AsyncPipe],
     providers: [RegisterService, FormErrorsService],
 })
 export default class Register {

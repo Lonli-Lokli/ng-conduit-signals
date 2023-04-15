@@ -1,5 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
+import { createEffect, createEvent, createStore, sample } from 'effector';
 import { lastValueFrom } from 'rxjs';
 import { NewUser, UserAndAuthenticationApiClient } from '../shared-data-access-api';
 import { AuthService } from '../shared-data-access-auth/auth.service';
@@ -12,26 +13,59 @@ export class RegisterService {
     readonly #authService = inject(AuthService);
     readonly #formErrorsService = inject(FormErrorsService);
 
-    readonly #status = signal<ApiStatus>('idle');
+    // events
+    readonly registerUserClicked = createEvent<NewUser>();
 
+    // stores
+    readonly #status = createStore<ApiStatus>('idle');
     readonly errors = this.#formErrorsService.formErrors;
-    readonly isLoading = computed(() => this.#status() === 'loading');
+    readonly isLoading = this.#status.map((status) => status === 'loading');
 
-    register(data: NewUser) {
-        this.#status.set('loading');
-        lastValueFrom(this.#userAndAuthenticationApiClient.createUser({ body: { user: data } }))
-            .then((response) => {
-                this.#status.set('success');
-                localStorage.setItem('ng-conduit-signals-token', response.user.token);
-                localStorage.setItem('ng-conduit-signals-user', JSON.stringify(response.user));
-                this.#authService.authenticate();
-            })
-            .catch(({ error }: HttpErrorResponse) => {
-                this.#status.set('error');
-                console.error('error registering new user: ', error);
-                if (error.errors) {
-                    this.#formErrorsService.setErrors(error.errors);
+    // effects
+    readonly #createUserFx = createEffect<NewUser, void, HttpErrorResponse>();
+    constructor() {
+        sample({
+            source: this.registerUserClicked,
+            fn: () => 'loading' as const,
+            targeet: this.#status,
+        });
+
+        sample({
+            source: this.registerUserClicked,
+            target: this.#createUserFx,
+        });
+
+        sample({
+            source: this.#createUserFx.doneData,
+            fn: () => 'success' as const,
+            targeet: this.#status,
+        });
+
+        sample({
+            source: this.#createUserFx.doneData,
+            targeet: this.#authService.autheticationRequired,
+        });
+
+        sample({
+            source: this.#createUserFx.failData,
+            fn: () => 'error' as const,
+            targeet: this.#status,
+        });
+
+        sample({
+            source: this.#createUserFx.failData,
+            filter: (response) => response.error.errors !== null,
+            fn: (response) => response.error.errors,
+            target: this.#formErrorsService.errorsReceived,
+        });
+
+        this.#createUserFx.use((data) =>
+            lastValueFrom(this.#userAndAuthenticationApiClient.createUser({ body: { user: data } })).then(
+                (response) => {
+                    localStorage.setItem('ng-conduit-signals-token', response.user.token);
+                    localStorage.setItem('ng-conduit-signals-user', JSON.stringify(response.user));
                 }
-            });
+            )
+        );
     }
 }

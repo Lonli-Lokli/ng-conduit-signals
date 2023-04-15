@@ -1,4 +1,4 @@
-import { NgIf } from '@angular/common';
+import { AsyncPipe, NgIf } from '@angular/common';
 import { ChangeDetectionStrategy, Component, Input as RouteInput, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { FollowAuthorService } from '../shared-data-access-follow-author/follow-author.service';
@@ -8,12 +8,12 @@ import { ProfileService } from './profile.service';
 
 @Component({
     template: `
-        <ng-container *ngIf="!profileService.isLoading(); else loading">
-            <ng-container *ngIf="profile">
+        <ng-container *ngIf="!(profileService.isLoading | async); else loading">
+            <ng-container *ngIf="this.profileService.profile | async as profile">
                 <app-ui-profile-user-info
                     [profile]="profile"
-                    [isOwner]="profileService.isOwner()"
-                    (toggleFollow)="profileService.toggleFollow(profile)"
+                    [isOwner]="(profileService.isOwner | async)!"
+                    (toggleFollow)="profileService.profileToggleClicked(profile)"
                 />
                 <div class="container">
                     <div class="row">
@@ -33,16 +33,12 @@ import { ProfileService } from './profile.service';
     standalone: true,
     host: { class: 'block profile-page' },
     providers: [ProfileService, FollowAuthorService],
-    imports: [NgIf, RouterOutlet, UiProfileUserInfo, UiProfileArticlesToggle],
+    imports: [NgIf, RouterOutlet, UiProfileUserInfo, UiProfileArticlesToggle, AsyncPipe],
 })
 export default class Profile {
     protected readonly profileService = inject(ProfileService);
 
     @RouteInput() set username(username: string) {
-        this.profileService.getProfile(username);
-    }
-
-    get profile() {
-        return this.profileService.profile();
+        this.profileService.profileRequested(username);
     }
 }

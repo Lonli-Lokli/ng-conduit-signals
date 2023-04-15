@@ -1,6 +1,6 @@
-import { HttpErrorResponse } from '@angular/common/http';
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { Router } from '@angular/router';
+import { createEffect, createEvent, createStore, sample } from 'effector';
 import { lastValueFrom } from 'rxjs';
 import { User, UserAndAuthenticationApiClient } from '../shared-data-access-api';
 import { injectIsServer } from '../shared-utils/is-server';
@@ -13,38 +13,66 @@ export class AuthService {
     readonly #router = inject(Router);
     readonly #isServer = injectIsServer();
 
-    readonly #user = signal<User | null>(null);
-    readonly #status = signal<AuthStatus>('idle');
+    // events
+    readonly #tokenRefreshRequested = createEvent();
+    readonly autheticationRequired = createEvent<string[] | void>();
 
-    readonly isAuthenticated = computed(() => this.#status() === 'authenticated');
-    readonly isAuthenticating = computed(() => this.#status() === 'idle');
-    readonly user = this.#user.asReadonly();
-    readonly username = computed(() => this.#user()?.username || '');
+    // stores
+    readonly user = createStore<User | null>(null);
+    readonly #status = createStore<AuthStatus>('idle');
+    readonly isAuthenticated = this.#status.map((status) => status === 'authenticated');
+    readonly isAuthenticating = this.#status.map((status) => status === 'idle');
+    readonly username = this.user.map((user) => user?.username || '');
 
-    async refresh() {
+    // effects
+    readonly #refreshTokenFx = createEffect<void, User | null>();
+
+    constructor() {
+        sample({
+            clock: this.#tokenRefreshRequested,
+            target: this.#refreshTokenFx,
+        });
+
+        sample({
+            clock: [
+                this.#refreshTokenFx.doneData.map((user) => user === null),
+                this.#refreshTokenFx.fail.map(() => true),
+            ],
+            filter: (erase) => erase,
+            fn: () => 'unauthenticated' as const,
+            target: [this.#status, this.user.reinit!]
+        });
+
+        sample({
+            source: this.#refreshTokenFx.doneData,
+            filter: (user) => user !== null,
+            fn: () => 'authenticated' as const,
+            target: this.#status,
+        });
+
+        sample({
+            source: this.#refreshTokenFx.doneData,
+            filter: (user) => user !== null,
+            target: this.user,
+        });
+
+        this.#refreshTokenFx.use(async () => {
+            const token = localStorage.getItem('ng-conduit-signals-token');
+            if (!token) return null;
+
+            const { user } = await lastValueFrom(this.#userAndAuthenticationApiClient.getCurrentUser());
+
+            localStorage.setItem('ng-conduit-signals-user', JSON.stringify(user));
+            return user;
+        });
+    }
+    
+    refresh() {
         if (this.#isServer) return;
-
-        const token = localStorage.getItem('ng-conduit-signals-token');
-        if (!token) {
-            this.#user.set(null);
-            this.#status.set('unauthenticated');
-            return;
-        }
-
-        const currentUserResponse = await lastValueFrom(this.#userAndAuthenticationApiClient.getCurrentUser()).catch(
-            ({ error }: HttpErrorResponse) => {
-                console.error(`error refreshing user -->`, error);
-                this.#user.set(null);
-                return { user: null };
-            }
-        );
-
-        this.#user.set(currentUserResponse.user);
-        this.#status.set(currentUserResponse.user ? 'authenticated' : 'unauthenticated');
-        localStorage.setItem('ng-conduit-signals-user', JSON.stringify(currentUserResponse.user));
+        this.#tokenRefreshRequested();
     }
 
-    authenticate(urlSegments: string[] = ['/']) {
-        this.refresh().then(() => this.#router.navigate(urlSegments));
-    }
+    // authenticate(urlSegments: string[] = ['/']) {
+    //     this.refresh().then(() => this.#router.navigate(urlSegments)); // TODO: not sure yet how to do
+    // }
 }

@@ -1,7 +1,6 @@
 import { inject } from '@angular/core';
-import { toObservable } from '@angular/core/rxjs-interop';
 import { CanMatchFn, Router } from '@angular/router';
-import { filter, map } from 'rxjs';
+import { filter, from, map } from 'rxjs';
 import { AuthService } from './auth.service';
 
 export function authGuard(type: 'protected' | 'unprotected'): CanMatchFn {
@@ -9,8 +8,8 @@ export function authGuard(type: 'protected' | 'unprotected'): CanMatchFn {
         const router = inject(Router);
         const authService = inject(AuthService);
 
-        return toObservable(authService.isAuthenticated).pipe(
-            filter(() => !authService.isAuthenticating()),
+        return from(authService.isAuthenticated).pipe(
+            filter(() => !authService.isAuthenticating.getState()), // TODO: bad practise
             map((isAuthenticated) => {
                 if ((type === 'unprotected' && !isAuthenticated) || (type === 'protected' && isAuthenticated))
                     return true;

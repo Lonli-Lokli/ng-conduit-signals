@@ -1,5 +1,5 @@
-import { HttpErrorResponse } from '@angular/common/http';
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
+import { createEffect, createEvent, createStore, sample } from 'effector';
 import { defer, lastValueFrom } from 'rxjs';
 import { Article, ArticlesApiClient } from '../shared-data-access-api';
 import { FavoriteArticleService } from '../shared-data-access-favorite-article/favorite-article.service';
@@ -11,52 +11,97 @@ export class HomeService {
     readonly #articlesApiClient = inject(ArticlesApiClient);
     readonly #favoriteArticleService = inject(FavoriteArticleService);
 
-    readonly #status = signal<ApiStatus>('idle');
-    readonly #feedType = signal<FeedType>('global');
-    readonly #selectedTag = signal('');
-    readonly #articles = signal<Article[]>([]);
+    // events
+    readonly articleSelected = createEvent<{ type: FeedType; tag?: string }>();
+    readonly favoriteToggled = createEvent<Article>();
 
-    readonly articles = this.#articles.asReadonly();
-    readonly status = this.#status.asReadonly();
-    readonly feedType = this.#feedType.asReadonly();
-    readonly selectedTag = this.#selectedTag.asReadonly();
+    // stores
+    readonly status = createStore<ApiStatus>('idle');
+    readonly feedType = createStore<FeedType>('global');
+    readonly selectedTag = createStore('');
+    readonly articles = createStore<Article[]>([]);
     readonly toggleFavoriteStatus = this.#favoriteArticleService.status;
 
-    getArticles(type: FeedType, tag?: string) {
-        this.#status.set('loading');
-        this.#feedType.set(type);
-        this.#selectedTag.set(tag || '');
+    // effects
+    readonly #articleGetFx = createEffect<
+        { type: FeedType; tag?: string },
+        {
+            articles: Article[];
+            articlesCount: number;
+        }
+    >();
 
-        lastValueFrom(
-            defer(() => {
-                if (type === 'feed') return this.#articlesApiClient.getArticlesFeed();
-                if (type === 'tag' && tag) {
-                    return this.#articlesApiClient.getArticles({ tag });
-                }
-                return this.#articlesApiClient.getArticles();
-            })
-        )
-            .then((response) => {
-                this.#status.set('success');
-                this.#articles.set(response.articles);
-            })
-            .catch(({ error }: HttpErrorResponse) => {
-                console.error(`Error getting articles for ${type}`, error);
-                this.#status.set('error');
-                this.#articles.set([]);
-            });
-    }
+    readonly #favoriteToggleFx = createEffect<Article, Article | null>();
 
-    toggleFavorite(articleToToggle: Article) {
-        this.#favoriteArticleService.toggleFavorite(articleToToggle).then((data) => {
-            if (data) {
-                this.#articles.update((articles) =>
-                    articles.map((article) => {
-                        if (article.slug === data.slug) return data;
-                        return article;
-                    })
-                );
-            }
+    constructor() {
+        sample({
+            source: this.articleSelected,
+            fn: () => 'loading' as const,
+            target: this.status,
         });
+
+        sample({
+            source: this.articleSelected,
+            fn: ({ type }) => type,
+            target: this.feedType,
+        });
+
+        sample({
+            source: this.articleSelected,
+            fn: ({ tag }) => tag || '',
+            target: this.selectedTag,
+        });
+
+        sample({
+            source: this.articleSelected,
+            target: this.#articleGetFx,
+        });
+
+        sample({
+            source: this.#articleGetFx.doneData,
+            fn: (response) => response.articles,
+            target: this.articles
+        });
+
+        sample({
+            source: this.#articleGetFx.doneData,
+            fn: () => 'success' as const,
+            target: this.status
+        })
+
+        sample({
+            source: this.#articleGetFx.fail,
+            fn: () => 'error' as const,
+            target: this.status
+        })
+
+        sample({
+            source: this.#articleGetFx.fail,
+            target: this.articles.reinit!
+        })
+
+        sample({
+            clock: this.#favoriteToggleFx.doneData,
+            source: this.articles,
+            filter: (_, data: Article | null): data is Article => data !== null,
+            fn: (articles, updatedArticle) => articles.map(article => {
+                if (article.slug === updatedArticle!.slug) return updatedArticle!;
+                return article;
+            }),
+            target: this.articles
+        })
+
+        this.#articleGetFx.use(({ type, tag }) =>
+            lastValueFrom(
+                defer(() => {
+                    if (type === 'feed') return this.#articlesApiClient.getArticlesFeed();
+                    if (type === 'tag' && tag) {
+                        return this.#articlesApiClient.getArticles({ tag });
+                    }
+                    return this.#articlesApiClient.getArticles();
+                })
+            )
+        );
+        this.#favoriteToggleFx.use(articleToToggle => this.#favoriteArticleService.toggleFavorite(articleToToggle));
     }
 }

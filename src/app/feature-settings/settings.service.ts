@@ -1,7 +1,8 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
+import { createEffect, createEvent, createStore, sample } from 'effector';
 import { lastValueFrom } from 'rxjs';
-import { UpdateUser, UserAndAuthenticationApiClient } from '../shared-data-access-api';
+import { UpdateUser, User, UserAndAuthenticationApiClient } from '../shared-data-access-api';
 import { AuthService } from '../shared-data-access-auth/auth.service';
 import { ApiStatus } from '../shared-data-access-models/api-status';
 import { injectIsServer } from '../shared-utils/is-server';
@@ -12,22 +13,55 @@ export class SettingsService {
     readonly #authService = inject(AuthService);
     readonly #isServer = injectIsServer();
 
-    readonly #status = signal<ApiStatus>('idle');
+    // events
+    readonly userUpdateClicked = createEvent<UpdateUser>();
 
-    readonly isLoading = computed(() => this.#status() === 'loading');
+    // stores
+    readonly #status = createStore<ApiStatus>('idle');
+    readonly isLoading = this.#status.map((status) => status === 'loading');
     readonly user = this.#authService.user;
+    readonly updateUser = createStore<UpdateUser>({});
 
-    updateUser(user: UpdateUser) {
-        this.#status.set('loading');
-        lastValueFrom(this.#userAndAuthenticationApiClient.updateCurrentUser({ body: { user } }))
-            .then((response) => {
-                this.#status.set('success');
-                this.#authService.authenticate(['/profile', response.user.username]);
-            })
-            .catch(({ error }: HttpErrorResponse) => {
-                console.error(`Error updating user`, error);
-                this.#status.set('error');
-            });
+    // effects
+    readonly #userUpdateFx = createEffect<UpdateUser, { user: User }>();
+
+    constructor() {
+        sample({
+            source: this.userUpdateClicked,
+            target: this.#userUpdateFx
+        })
+
+        sample({
+            source: this.#userUpdateFx,
+            fn: () => 'loading' as const,
+            target: this.#status
+        })
+
+        sample({
+            source: this.#userUpdateFx.doneData,
+            fn: () => 'success' as const,
+            target: this.#status
+        });
+
+        sample({
+            source: this.#userUpdateFx.failData,
+            fn: () => 'error' as const,
+            target: this.#status
+        });
+
+        sample({
+            source: this.#userUpdateFx.doneData,
+            fn: (response) => ['/profile', response.user.username],
+            target: this.#authService.autheticationRequired
+        });
+
+        sample({
+            source: this.user,
+            filter: user => user !== null,
+            fn: user => ({...structuredClone(user), password: ''}),
+            target: this.updateUser
+        })
+        this.#userUpdateFx.use(user => lastValueFrom(this.#userAndAuthenticationApiClient.updateCurrentUser({ body: { user } })));
     }
 
     logout() {
@@ -35,6 +69,6 @@ export class SettingsService {
             localStorage.removeItem('ng-conduit-signals-token');
             localStorage.removeItem('ng-conduit-signals-user');
         }
-        this.#authService.authenticate();
+        this.#authService.autheticationRequired();
     }
 }

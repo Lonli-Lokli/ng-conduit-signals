@@ -1,4 +1,4 @@
-import { NgFor, NgIf } from '@angular/common';
+import { AsyncPipe, NgFor, NgIf } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -19,7 +19,7 @@ import { LoginService } from './login.service';
 
             <app-shared-ui-form-errors [errors]="loginService.errors()" />
 
-            <form #form="ngForm" (ngSubmit)="loginService.login(loginUser)">
+            <form #form="ngForm" (ngSubmit)="loginService.loginRequested(loginUser)">
                 <fieldset class="form-group">
                     <input
                         [(ngModel)]="loginUser.email"
@@ -44,7 +44,7 @@ import { LoginService } from './login.service';
                 <button
                     type="submit"
                     class="btn btn-lg btn-primary pull-xs-right"
-                    [disabled]="!form.valid || loginService.isLoading()"
+                    [disabled]="!form.valid || (loginService.isLoading | async)"
                 >
                     Sign in
                 </button>
@@ -52,7 +52,7 @@ import { LoginService } from './login.service';
         </app-shared-ui-form-layout>
     `,
     changeDetection: ChangeDetectionStrategy.OnPush,
-    imports: [SharedUiFormLayout, SharedUiFormErrors, NgIf, NgFor, RouterLink, FormsModule],
+    imports: [SharedUiFormLayout, SharedUiFormErrors, NgIf, NgFor, RouterLink, FormsModule, AsyncPipe],
     providers: [LoginService, FormErrorsService],
 })
 export default class Login {
