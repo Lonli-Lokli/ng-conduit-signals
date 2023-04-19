@@ -1,7 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { createEffect, createEvent, createStore, sample } from 'effector';
-import { lastValueFrom } from 'rxjs';
 import { NewUser, UserAndAuthenticationApiClient } from '../shared-data-access-api';
 import { AuthService } from '../shared-data-access-auth/auth.service';
 import { FormErrorsService } from '../shared-data-access-form-errors/form-errors.service';
@@ -59,13 +58,11 @@ export class RegisterService {
             target: this.#formErrorsService.errorsReceived,
         });
 
-        this.#createUserFx.use((data) =>
-            lastValueFrom(this.#userAndAuthenticationApiClient.createUser({ body: { user: data } })).then(
-                (response) => {
-                    localStorage.setItem('ng-conduit-signals-token', response.user.token);
-                    localStorage.setItem('ng-conduit-signals-user', JSON.stringify(response.user));
-                }
-            )
-        );
+        this.#createUserFx
+            .use((data) => this.#userAndAuthenticationApiClient.createUser({ body: { user: data } })
+            .then((response) => {
+                localStorage.setItem('ng-conduit-signals-token', response.user.token);
+                localStorage.setItem('ng-conduit-signals-user', JSON.stringify(response.user));
+            }));
     }
 }

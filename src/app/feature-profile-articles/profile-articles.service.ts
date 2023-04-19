@@ -1,6 +1,5 @@
 import { inject, Injectable } from '@angular/core';
 import { createEffect, createEvent, createStore, sample } from 'effector';
-import { lastValueFrom } from 'rxjs';
 import { ProfileService } from '../feature-profile/profile.service';
 import { Article, ArticlesApiClient, Profile } from '../shared-data-access-api';
 import { FavoriteArticleService } from '../shared-data-access-favorite-article/favorite-article.service';
@@ -67,21 +66,18 @@ export class ProfileArticlesService {
             clock: this.#toggleFavoriteFx.done,
             source: this.articles,
             filter: (_, article) => article !== null,
-            fn: (articles, {params, result}) => articles.map(article => {
-                if (article.slug === params.slug) return result!;
-                return article;
-            }),
-            target: this.articles
-
-        })
+            fn: (articles, { params, result }) =>
+                articles.map((article) => {
+                    if (article.slug === params.slug) return result!;
+                    return article;
+                }),
+            target: this.articles,
+        });
         this.#articlesGetFx.use((profile) =>
-            lastValueFrom(
-                this.#articlesType === 'favorites'
-                    ? this.#articlesApiClient.getArticles({ favorited: profile.username })
-                    : this.#articlesApiClient.getArticles({ author: profile.username })
-            )
+            this.#articlesType === 'favorites'
+                ? this.#articlesApiClient.getArticles({ favorited: profile.username })
+                : this.#articlesApiClient.getArticles({ author: profile.username })
         );
-        this.#toggleFavoriteFx.use(articleToToggle => this.#favoriteArticleService.toggleFavorite(articleToToggle));
-
+        this.#toggleFavoriteFx.use((articleToToggle) => this.#favoriteArticleService.toggleFavorite(articleToToggle));
     }
 }

@@ -1,7 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { Router } from '@angular/router';
 import { createEffect, createEvent, sample } from 'effector';
-import { lastValueFrom } from 'rxjs';
 import { AuthService } from 'src/app/shared-data-access-auth/auth.service';
 import { ArticlesApiClient, NewArticle, User } from '../../shared-data-access-api';
 
@@ -26,7 +25,7 @@ export class NewArticleService {
             target: this.#createArticleFx,
         });
         this.#createArticleFx.use(async ({ newArticle, user }) => {
-            const response = await lastValueFrom(this.#articlesClient.createArticle({ body: { article: newArticle } }));
+            const response = await this.#articlesClient.createArticle({ body: { article: newArticle } });
             if (response) {
                 this.#router.navigate(['/article', response.article.slug]);
             } else {

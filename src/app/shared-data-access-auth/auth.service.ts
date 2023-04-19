@@ -1,7 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { createEffect, createEvent, createStore, sample } from 'effector';
-import { lastValueFrom } from 'rxjs';
 import { User, UserAndAuthenticationApiClient } from '../shared-data-access-api';
 import { injectIsServer } from '../shared-utils/is-server';
 
@@ -60,7 +59,7 @@ export class AuthService {
             const token = localStorage.getItem('ng-conduit-signals-token');
             if (!token) return null;
 
-            const { user } = await lastValueFrom(this.#userAndAuthenticationApiClient.getCurrentUser());
+            const { user } = await this.#userAndAuthenticationApiClient.getCurrentUser();
 
             localStorage.setItem('ng-conduit-signals-user', JSON.stringify(user));
             return user;

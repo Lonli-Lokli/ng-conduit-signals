@@ -1,8 +1,6 @@
-import { HttpErrorResponse } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Router } from '@angular/router';
 import { createEffect, createEvent, createStore, sample } from 'effector';
-import { lastValueFrom } from 'rxjs';
 import { Article, ArticlesApiClient, UpdateArticle } from '../../shared-data-access-api';
 import { ApiStatus } from '../../shared-data-access-models/api-status';
 
@@ -56,11 +54,12 @@ export class EditArticleService {
             target: this.#articleUpdateFx,
         });
 
-        this.#articleGetFx.use((slug) => lastValueFrom(this.#articlesApiClient.getArticle({ slug })));
+        this.#articleGetFx.use((slug) => this.#articlesApiClient.getArticle({ slug }));
         this.#articleUpdateFx.use(async ({ article, articleToUpdate }) => {
-            const response = await lastValueFrom(
-                this.#articlesApiClient.updateArticle({ slug: article.slug, body: { article: articleToUpdate } })
-            );
+            const response = await this.#articlesApiClient.updateArticle({
+                slug: article.slug,
+                body: { article: articleToUpdate },
+            });
             void this.#router.navigate(['/article', response.article.slug]);
         });
     }

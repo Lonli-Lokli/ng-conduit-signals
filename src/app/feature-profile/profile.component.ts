@@ -5,6 +5,7 @@ import { FollowAuthorService } from '../shared-data-access-follow-author/follow-
 import { UiProfileArticlesToggle } from '../ui-profile/articles-toggle/articles-toggle.component';
 import { UiProfileUserInfo } from '../ui-profile/user-info/user-info.component';
 import { ProfileService } from './profile.service';
+import { Title } from '@angular/platform-browser';
 
 @Component({
     template: `
@@ -37,8 +38,10 @@ import { ProfileService } from './profile.service';
 })
 export default class Profile {
     protected readonly profileService = inject(ProfileService);
-
+    protected readonly titleService = inject(Title);
+    
     @RouteInput() set username(username: string) {
         this.profileService.profileRequested(username);
+        this.titleService.setTitle(username + ' Author Profile');
     }
 }

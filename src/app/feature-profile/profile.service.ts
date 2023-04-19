@@ -4,7 +4,6 @@ import { Profile, ProfileApiClient } from '../shared-data-access-api';
 import { AuthService } from '../shared-data-access-auth/auth.service';
 import { FollowAuthorService } from '../shared-data-access-follow-author/follow-author.service';
 import { ApiStatus } from '../shared-data-access-models/api-status';
-import { lastValueFrom } from 'rxjs';
 
 @Injectable()
 export class ProfileService {
@@ -74,7 +73,7 @@ export class ProfileService {
             source: this.profileToggleClicked,
             target: this.#profileTogggleFx
         })
-        this.#profileGetFx.use(username => lastValueFrom(this.#profileApiClient.getProfileByUsername({ username })));
+        this.#profileGetFx.use(username => this.#profileApiClient.getProfileByUsername({ username }));
         this.#profileTogggleFx.use(profile =>  this.#followAuthorService.toggleFollow(profile));
     }
 }

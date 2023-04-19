@@ -1,6 +1,5 @@
 import { Injectable, inject } from '@angular/core';
 import { createEffect, createEvent, createStore, sample } from 'effector';
-import { defer, lastValueFrom } from 'rxjs';
 import { Article, ArticlesApiClient } from '../shared-data-access-api';
 import { FavoriteArticleService } from '../shared-data-access-favorite-article/favorite-article.service';
 import { ApiStatus } from '../shared-data-access-models/api-status';
@@ -60,48 +59,45 @@ export class HomeService {
         sample({
             source: this.#articleGetFx.doneData,
             fn: (response) => response.articles,
-            target: this.articles
+            target: this.articles,
         });
 
         sample({
             source: this.#articleGetFx.doneData,
             fn: () => 'success' as const,
-            target: this.status
-        })
+            target: this.status,
+        });
 
         sample({
             source: this.#articleGetFx.fail,
             fn: () => 'error' as const,
-            target: this.status
-        })
+            target: this.status,
+        });
 
         sample({
             source: this.#articleGetFx.fail,
-            target: this.articles.reinit!
-        })
+            target: this.articles.reinit!,
+        });
 
         sample({
             clock: this.#favoriteToggleFx.doneData,
             source: this.articles,
             filter: (_, data: Article | null): data is Article => data !== null,
-            fn: (articles, updatedArticle) => articles.map(article => {
-                if (article.slug === updatedArticle!.slug) return updatedArticle!;
-                return article;
-            }),
-            target: this.articles
-        })
+            fn: (articles, updatedArticle) =>
+                articles.map((article) => {
+                    if (article.slug === updatedArticle!.slug) return updatedArticle!;
+                    return article;
+                }),
+            target: this.articles,
+        });
 
-        this.#articleGetFx.use(({ type, tag }) =>
-            lastValueFrom(
-                defer(() => {
-                    if (type === 'feed') return this.#articlesApiClient.getArticlesFeed();
-                    if (type === 'tag' && tag) {
-                        return this.#articlesApiClient.getArticles({ tag });
-                    }
-                    return this.#articlesApiClient.getArticles();
-                })
-            )
-        );
-        this.#favoriteToggleFx.use(articleToToggle => this.#favoriteArticleService.toggleFavorite(articleToToggle));
+        this.#articleGetFx.use(({ type, tag }) => {
+            if (type === 'feed') return this.#articlesApiClient.getArticlesFeed();
+            if (type === 'tag' && tag) {
+                return this.#articlesApiClient.getArticles({ tag });
+            }
+            return this.#articlesApiClient.getArticles();
+        });
+        this.#favoriteToggleFx.use((articleToToggle) => this.#favoriteArticleService.toggleFavorite(articleToToggle));
     }
 }

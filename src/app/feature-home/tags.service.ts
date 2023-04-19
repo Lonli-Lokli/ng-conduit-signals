@@ -1,6 +1,5 @@
 import { Injectable, inject } from '@angular/core';
 import { createEffect, createEvent, createStore, sample } from 'effector';
-import { lastValueFrom } from 'rxjs';
 import { TagsApiClient } from '../shared-data-access-api';
 import { ApiStatus } from '../shared-data-access-models/api-status';
 
@@ -48,6 +47,6 @@ export class TagsService {
             target: [this.status, this.tags.reinit!],
         });
 
-        this.#tagsGetFx.use(() => lastValueFrom(this.#tagsApiClient.getTags()));
+        this.#tagsGetFx.use(() => this.#tagsApiClient.getTags());
     }
 }

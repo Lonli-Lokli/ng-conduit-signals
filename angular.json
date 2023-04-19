@@ -43,7 +43,13 @@
                             "vendorChunk": true,
                             "extractLicenses": false,
                             "sourceMap": true,
-                            "namedChunks": true
+                            "namedChunks": true,
+                            "fileReplacements": [
+                              {
+                                "replace": "src/environments/environment.ts",
+                                "with": "src/environments/environment.development.ts"
+                              }
+                            ]
                         }
                     },
                     "defaultConfiguration": "production"
@@ -68,55 +74,63 @@
                     }
                 },
                 "server": {
-                    "builder": "@angular-devkit/build-angular:server",
-                    "options": {
-                        "outputPath": "dist/ng-conduit-signals/server",
-                        "main": "server.ts",
-                        "tsConfig": "tsconfig.server.json"
+                  "builder": "@angular-devkit/build-angular:server",
+                  "options": {
+                    "outputPath": "dist/ng-conduit-signals/server",
+                    "main": "server.ts",
+                    "tsConfig": "tsconfig.server.json"
+                  },
+                  "configurations": {
+                    "production": {
+                      "outputHashing": "media"
                     },
-                    "configurations": {
-                        "production": {
-                            "outputHashing": "media"
-                        },
-                        "development": {
-                            "optimization": false,
-                            "sourceMap": true,
-                            "extractLicenses": false,
-                            "vendorChunk": true
+                    "development": {
+                      "optimization": false,
+                      "sourceMap": true,
+                      "extractLicenses": false,
+                      "vendorChunk": true,
+                      "fileReplacements": [
+                        {
+                          "replace": "src/environments/environment.ts",
+                          "with": "src/environments/environment.development.ts"
                         }
-                    },
-                    "defaultConfiguration": "production"
+                      ]
+                    }
+                  },
+                  "defaultConfiguration": "production"
                 },
                 "serve-ssr": {
-                    "builder": "@nguniversal/builders:ssr-dev-server",
-                    "configurations": {
-                        "development": {
-                            "browserTarget": "ng-conduit-signals:build:development",
-                            "serverTarget": "ng-conduit-signals:server:development"
-                        },
-                        "production": {
-                            "browserTarget": "ng-conduit-signals:build:production",
-                            "serverTarget": "ng-conduit-signals:server:production"
-                        }
+                  "builder": "@nguniversal/builders:ssr-dev-server",
+                  "configurations": {
+                    "development": {
+                      "browserTarget": "ng-conduit-signals:build:development",
+                      "serverTarget": "ng-conduit-signals:server:development"
                     },
-                    "defaultConfiguration": "development"
+                    "production": {
+                      "browserTarget": "ng-conduit-signals:build:production",
+                      "serverTarget": "ng-conduit-signals:server:production"
+                    }
+                  },
+                  "defaultConfiguration": "development"
                 },
                 "prerender": {
-                    "builder": "@nguniversal/builders:prerender",
-                    "options": {
-                        "routes": ["/"]
+                  "builder": "@nguniversal/builders:prerender",
+                  "options": {
+                    "routes": [
+                      "/"
+                    ]
+                  },
+                  "configurations": {
+                    "production": {
+                      "browserTarget": "ng-conduit-signals:build:production",
+                      "serverTarget": "ng-conduit-signals:server:production"
                     },
-                    "configurations": {
-                        "production": {
-                            "browserTarget": "ng-conduit-signals:build:production",
-                            "serverTarget": "ng-conduit-signals:server:production"
-                        },
-                        "development": {
-                            "browserTarget": "ng-conduit-signals:build:development",
-                            "serverTarget": "ng-conduit-signals:server:development"
-                        }
-                    },
-                    "defaultConfiguration": "production"
+                    "development": {
+                      "browserTarget": "ng-conduit-signals:build:development",
+                      "serverTarget": "ng-conduit-signals:server:development"
+                    }
+                  },
+                  "defaultConfiguration": "production"
                 }
             }
         }

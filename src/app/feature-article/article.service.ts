@@ -3,7 +3,6 @@ import { DomSanitizer } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { combine, createEffect, createEvent, createStore, sample } from 'effector';
 import { marked } from 'marked';
-import { lastValueFrom } from 'rxjs';
 import { Article, ArticlesApiClient, Comment, CommentsApiClient, Profile } from '../shared-data-access-api';
 import { AuthService } from '../shared-data-access-auth/auth.service';
 import { FavoriteArticleService } from '../shared-data-access-favorite-article/favorite-article.service';
@@ -145,26 +144,24 @@ export class ArticleService {
 
         this.#loadArticleFx.use((slug) =>
             Promise.all([
-                lastValueFrom(this.#articlesApiClient.getArticle({ slug })),
-                lastValueFrom(this.#commentsApiClient.getArticleComments({ slug })),
+                this.#articlesApiClient.getArticle({ slug }),
+                this.#commentsApiClient.getArticleComments({ slug }),
             ])
         );
         this.#toggleFavoriteFx.use((article) => this.#favoriteArticleService.toggleFavorite(article));
         this.#deleteArticleFx.use(async (slug) => {
-            await lastValueFrom(this.#articlesApiClient.deleteArticle({ slug }));
+            await this.#articlesApiClient.deleteArticle({ slug });
             void this.#router.navigate(['/']);
         });
         this.#followAuthorToggleFx.use((profile) => this.#followAuthorService.toggleFollow(profile));
         this.#createCommentFx.use(({ comment, article }) =>
-            lastValueFrom(
-                this.#commentsApiClient.createArticleComment({
-                    body: { comment: { body: comment } },
-                    slug: article.slug,
-                })
-            )
+            this.#commentsApiClient.createArticleComment({
+                body: { comment: { body: comment } },
+                slug: article.slug,
+            })
         );
         this.#deleteCommentFx.use(({ commentId, article }) =>
-            lastValueFrom(this.#commentsApiClient.deleteArticleComment({ id: commentId, slug: article.slug }))
+            this.#commentsApiClient.deleteArticleComment({ id: commentId, slug: article.slug })
         );
     }
 }

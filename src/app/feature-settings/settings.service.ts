@@ -1,7 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { createEffect, createEvent, createStore, sample } from 'effector';
-import { lastValueFrom } from 'rxjs';
 import { UpdateUser, User, UserAndAuthenticationApiClient } from '../shared-data-access-api';
 import { AuthService } from '../shared-data-access-auth/auth.service';
 import { ApiStatus } from '../shared-data-access-models/api-status';
@@ -61,7 +60,7 @@ export class SettingsService {
             fn: user => ({...structuredClone(user), password: ''}),
             target: this.updateUser
         })
-        this.#userUpdateFx.use(user => lastValueFrom(this.#userAndAuthenticationApiClient.updateCurrentUser({ body: { user } })));
+        this.#userUpdateFx.use(user => this.#userAndAuthenticationApiClient.updateCurrentUser({ body: { user } }));
     }
 
     logout() {
